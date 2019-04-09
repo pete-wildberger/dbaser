@@ -1,3 +1,6 @@
+A base class for Postgres models. The class has common methods for SELECTing, INSERTing, UPDATing, and DELETEing db rows.
+Updates and inserts are set to return the entry.
+
 example usage:
 
 ````
