@@ -8,165 +8,109 @@ export abstract class Model {
     this.table = table;
   }
 
-  request = (sql_query: string, params: any[]): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      this.pool.connect((err, client, done) => {
-        if (err) {
-          done();
-          return reject(err);
-        }
-        client.query(sql_query, params, (err, result) => {
-          done();
-          if (err) {
-            reject(err);
-          }
-          resolve(result.rows);
-        });
-      });
-    });
+  request = async (sql_query: string, params: any[]): Promise<any[]> => {
+    try {
+      const { rows } = await this.pool.query(sql_query, params);
+      return rows;
+    } catch (e) {
+      throw e;
+    }
   };
 
-  find_all = (orderBy?: string): Promise<any> => {
+  find_all = async (orderBy?: string): Promise<any[]> => {
     let query: string = `SELECT * FROM ${this.table}`;
     if (typeof orderBy !== undefined) {
       query += ` ORDER BY ${orderBy}`;
-      console.log(query);
     }
-    return new Promise((resolve, reject) => {
-      this.pool.connect((err, client, done) => {
-        if (err) {
-          done();
-          return reject(err);
-        }
-        client.query(query, (err, result) => {
-          done();
-          if (err) {
-            console.log(err);
-            reject(err);
-          }
-          resolve(result.rows);
-        });
-      });
-    });
+    try {
+      const { rows } = await this.pool.query(query);
+      return rows;
+    } catch (e) {
+      throw e;
+    }
   };
 
-  find_by_id = (_id: number): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      this.pool.connect((err, client, done) => {
-        if (err) {
-          done();
-          return reject(err);
-        }
-        client.query(`SELECT * FROM ${this.table} WHERE _id=$1`, [_id], (err, result) => {
-          done();
-          if (err) {
-            reject(err);
-          }
-          resolve(result.rows[0]);
-        });
-      });
-    });
+  find_by_id = async (_id: number): Promise<any[]> => {
+    try {
+      const { rows } = await this.pool.query(`SELECT * FROM ${this.table} WHERE _id=$1`, [_id]);
+      return rows;
+    } catch (e) {
+      throw e;
+    }
   };
-  bulk_insert = (entries: any[]): any => {
+
+  bulk_insert = async (entries: any[]): Promise<any[]> => {
     const props: string[] = Object.keys(entries[0]);
-    let count: number = 1;
-    let values: any[] = [];
-    let inserts: string[] = [];
-    entries.forEach(entry => {
-      let blings: string[] = [];
-      for (let prop in entry) {
-        values.push(entry[prop]);
-        blings.push('$' + count);
-        count++;
-      }
-      inserts.push(`(${blings.join(',')})`);
-    });
+    let count: number = 0;
+    const { inserts, values } = entries.reduce(
+      (acc, entry) => {
+        const blings = Object.values(entry).map((v: any) => {
+          acc.values.push(v);
+          count++;
+          return '$' + count;
+        });
+        acc.inserts.push(`(${blings.join(',')})`);
+        return acc;
+      },
+      { inserts: [], values: [] }
+    );
+
     const db_query = `INSERT INTO ${this.table} (${props.join(',')}) VALUES ${inserts.join(',')} RETURNING *`;
-    return new Promise((resolve, reject) => {
-      this.pool.connect((err, client, done) => {
-        if (err) {
-          done();
-          return reject(err);
-        }
-        client.query(db_query, values, (err, result) => {
-          done();
-          if (err) {
-            reject(err);
-          }
-          resolve(result);
-        });
-      });
-    });
-  };
-  single_insert = (entry: { [key: string]: any }): Promise<any> => {
-    let blings: string[] = [];
-    let count: number = 1;
-    let values: any[] = [];
-    let props: string[] = [];
-    for (let prop in entry) {
-      values.push(entry[prop]);
-      props.push(prop);
-      blings.push('$' + count);
-      count++;
+
+    try {
+      const { rows } = await this.pool.query(db_query, values);
+      return rows;
+    } catch (e) {
+      throw e;
     }
+  };
+
+  single_insert = async (entry: { [key: string]: any }): Promise<any> => {
+    const { values, props, blings } = Object.entries(entry).reduce(
+      (acc, [key, value], i) => {
+        acc.values.push(value);
+        acc.props.push(key);
+        acc.blings.push('$' + (i + 1));
+        return acc;
+      },
+      { values: [], props: [], blings: [] }
+    );
+
     const db_query = `INSERT INTO ${this.table} (${props.join(',')}) VALUES (${blings.join(',')}) RETURNING *`;
-    return new Promise((resolve, reject) => {
-      this.pool.connect((err, client, done) => {
-        if (err) {
-          done();
-          return reject(err);
-        }
-        client.query(db_query, values, (err, result) => {
-          done();
-          if (err) {
-            reject(err);
-          }
-          resolve(result.rows[0]);
-        });
-      });
-    });
-  };
-  single_update = (entry: any, _id: number): Promise<any> => {
-    let count: number = 1;
-    let values: any[] = [];
-    let updates: string[] = [];
-    for (let prop in entry) {
-      values.push(entry[prop]);
-      updates.push(`${prop} =` + '$' + count);
-      count++;
+    try {
+      const { rows } = await this.pool.query(db_query, values);
+      return rows;
+    } catch (e) {
+      throw e;
     }
-    const db_query = `UPDATE ${this.table} SET (${updates.join(',')}) RETURNING * WHERE _id = ${_id}`;
-    return new Promise((resolve, reject) => {
-      this.pool.connect((err, client, done) => {
-        if (err) {
-          done();
-          return reject(err);
-        }
-        client.query(db_query, values, (err, result) => {
-          done();
-          if (err) {
-            reject(err);
-          }
-          resolve(result);
-        });
-      });
-    });
   };
-  destroy_by_id = (_id: number): Promise<any> => {
-    return new Promise((resolve, reject) => {
-      this.pool.connect((err, client, done) => {
-        if (err) {
-          done();
-          return reject(err);
-        }
-        client.query(`DELETE FROM ${this.table} WHERE _id=$2`, [_id], (err, result) => {
-          done();
-          if (err) {
-            reject(err);
-          }
-          resolve(result);
-        });
-      });
-    });
+
+  single_update = async (entry: any, _id: number): Promise<any> => {
+    const { values, updates } = Object.entries(entry).reduce(
+      (acc, [key, value], i) => {
+        acc.values.push(value);
+        acc.updates.push(`${key} =$` + (i + 1));
+        return acc;
+      },
+      { values: [], updates: [] }
+    );
+
+    const db_query = `UPDATE ${this.table} SET (${updates.join(',')}) RETURNING * WHERE _id = ${_id}`;
+
+    try {
+      const { rows } = await this.pool.query(db_query, values);
+      return rows;
+    } catch (e) {
+      throw e;
+    }
+  };
+
+  destroy_by_id = async (_id: number): Promise<any> => {
+    try {
+      const { rows } = await this.pool.query(`DELETE FROM ${this.table} WHERE _id=$2`, [_id]);
+      return rows;
+    } catch (e) {
+      throw e;
+    }
   };
 }
